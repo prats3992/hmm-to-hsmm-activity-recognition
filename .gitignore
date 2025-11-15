@@ -1,0 +1,51 @@
+# Python virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific - temporary outputs
+outputs/images/*.png
+outputs/results/*.json
+outputs/results/*.csv
+
+# Keep directory structure but not files
+!outputs/images/.gitkeep
+!outputs/results/.gitkeep
+
+# Data files (if large)
+# Uncomment if you don't want to track CSV files
+# data/*.csv
+
+# Documentation builds
+docs/_build/
+
+# Temporary files
+*.tmp
+*.log
