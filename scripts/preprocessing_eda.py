@@ -208,13 +208,23 @@ class HARPreprocessor:
         print("\nComputing correlation matrix (this may take a moment)...")
         corr_matrix = self.train_df[feature_cols].corr().abs()
         
-        # Find highly correlated features
+        # Find highly correlated features using vectorized approach
         threshold = 0.95
         high_corr_pairs = []
-        for i in range(len(corr_matrix.columns)):
-            for j in range(i+1, len(corr_matrix.columns)):
-                if corr_matrix.iloc[i, j] > threshold:
-                    high_corr_pairs.append((corr_matrix.columns[i], corr_matrix.columns[j], corr_matrix.iloc[i, j]))
+        
+        # Use upper triangle to avoid duplicates
+        upper_triangle = np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)
+        high_corr_mask = (corr_matrix.values > threshold) & upper_triangle
+        
+        # Get indices of high correlations
+        high_corr_indices = np.argwhere(high_corr_mask)
+        
+        for i, j in high_corr_indices:
+            high_corr_pairs.append((
+                corr_matrix.columns[i], 
+                corr_matrix.columns[j], 
+                corr_matrix.iloc[i, j]
+            ))
         
         print(f"\n1. Highly Correlated Feature Pairs (correlation > {threshold}):")
         print(f"   Found {len(high_corr_pairs)} pairs")
@@ -241,17 +251,87 @@ class HARPreprocessor:
         
         return self, high_corr_pairs
     
-    def feature_selection_analysis(self, n_features=100):
-        """Perform feature selection analysis"""
+    def prune_correlated_features(self, high_corr_pairs, threshold=0.95):
+        """
+        Prune highly correlated features to reduce multicollinearity.
+        
+        For each pair of highly correlated features, removes one of them.
+        This reduces redundancy and improves feature selection efficiency.
+        
+        Parameters:
+        -----------
+        high_corr_pairs : list of tuples
+            List of (feature1, feature2, correlation) tuples
+        threshold : float
+            Correlation threshold (features with correlation > threshold are pruned)
+            
+        Returns:
+        --------
+        pruned_features : list
+            List of features after pruning
+        features_dropped : list
+            List of features that were removed
+        """
+        print("\n" + "="*80)
+        print("PRUNING HIGHLY CORRELATED FEATURES")
+        print("="*80)
+        
+        feature_cols = [col for col in self.train_df.columns if col not in ['subject', 'Activity']]
+        
+        # Track which features to drop
+        features_to_drop = set()
+        
+        # For each correlated pair, drop one feature
+        for feat1, feat2, corr in high_corr_pairs:
+            # If neither feature has been dropped yet, drop feat2
+            if feat1 not in features_to_drop and feat2 not in features_to_drop:
+                features_to_drop.add(feat2)
+            # If feat1 is already dropped, keep feat2
+            elif feat1 in features_to_drop:
+                continue
+            # If feat2 is already dropped, keep feat1
+            else:
+                continue
+        
+        pruned_features = [f for f in feature_cols if f not in features_to_drop]
+        
+        print(f"\nOriginal features: {len(feature_cols)}")
+        print(f"Features dropped: {len(features_to_drop)}")
+        print(f"Features remaining: {len(pruned_features)}")
+        print(f"Reduction: {len(features_to_drop) / len(feature_cols) * 100:.1f}%")
+        
+        if len(features_to_drop) > 0:
+            print(f"\nFirst 10 dropped features:")
+            for i, feat in enumerate(list(features_to_drop)[:10], 1):
+                print(f"  {i}. {feat}")
+        
+        return self, pruned_features, list(features_to_drop)
+    
+    def feature_selection_analysis(self, n_features=200, pruned_features=None):
+        """
+        Perform feature selection analysis on pruned features.
+        
+        Parameters:
+        -----------
+        n_features : int
+            Number of top features to select (increased from 100 to 200)
+        pruned_features : list, optional
+            List of features after correlation pruning. If None, uses all features.
+        """
         print("\n" + "="*80)
         print("FEATURE SELECTION ANALYSIS")
         print("="*80)
         print(f"\nNote: 'Activity' is the TARGET VARIABLE and will always be included")
         print(f"      'subject' identifies individuals for sequential modeling")
-        print(f"      Selecting top {n_features} discriminative features from 561 sensor features\n")
         
         # Prepare data
-        feature_cols = [col for col in self.train_df.columns if col not in ['subject', 'Activity']]
+        if pruned_features is not None:
+            feature_cols = pruned_features
+            print(f"      Selecting top {n_features} features from {len(feature_cols)} pruned features (after correlation removal)\n")
+        else:
+            feature_cols = [col for col in self.train_df.columns if col not in ['subject', 'Activity']]
+            print(f"      Selecting top {n_features} features from {len(feature_cols)} original features\n")
+        
         X_train = self.train_df[feature_cols].values
         y_train = self.train_df['Activity'].values
         
@@ -334,7 +414,12 @@ class HARPreprocessor:
         return self, selected_features
     
     def pca_analysis(self, n_components=100):
-        """Perform PCA analysis"""
+        """
+        Perform PCA analysis.
+        
+        Note: UCI HAR dataset is already normalized to [-1, 1].
+        Applying PCA directly without additional scaling to preserve the variance structure.
+        """
         print("\n" + "="*80)
         print("PCA ANALYSIS")
         print("="*80)
@@ -343,17 +428,14 @@ class HARPreprocessor:
         feature_cols = [col for col in self.train_df.columns if col not in ['subject', 'Activity']]
         X_train = self.train_df[feature_cols].values
         
-        # Standardize features
-        print("\n1. Standardizing features...")
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        
-        # Apply PCA
-        print(f"2. Applying PCA with {n_components} components...")
+        # Apply PCA directly (data is already normalized)
+        print(f"\n1. Applying PCA with {n_components} components...")
+        print("   Note: Data is already normalized, skipping StandardScaler")
         pca = PCA(n_components=n_components, random_state=42)
-        X_pca = pca.fit_transform(X_train_scaled)
+        X_pca = pca.fit_transform(X_train)
         
         # Explained variance
-        print(f"\n3. Explained Variance:")
+        print(f"\n2. Explained Variance:")
         cumsum_variance = np.cumsum(pca.explained_variance_ratio_)
         print(f"   Variance explained by {n_components} components: {cumsum_variance[-1]:.4f}")
         print(f"   Components needed for 90% variance: {np.argmax(cumsum_variance >= 0.90) + 1}")
@@ -468,7 +550,8 @@ def main():
     preprocessor.subject_analysis()
     preprocessor.feature_statistics()
     preprocessor, high_corr_pairs = preprocessor.correlation_analysis()
-    preprocessor, selected_features = preprocessor.feature_selection_analysis(n_features=100)
+    preprocessor, pruned_features, dropped_features = preprocessor.prune_correlated_features(high_corr_pairs, threshold=0.95)
+    preprocessor, selected_features = preprocessor.feature_selection_analysis(n_features=200, pruned_features=pruned_features)
     preprocessor, pca = preprocessor.pca_analysis(n_components=100)
     preprocessor, train_seq, test_seq, transition_prob = preprocessor.prepare_sequences_for_hmm()
     
@@ -483,6 +566,7 @@ def main():
     print("   ✓ Data is already normalized")
     
     print("\n2. Feature Selection Recommendations:")
+    print(f"   ✓ Correlation-based pruning removed {len(dropped_features)} redundant features")
     print(f"   ✓ ANOVA F-test selected {len(selected_features['anova'])} features")
     print(f"   ✓ Mutual Information selected {len(selected_features['mutual_info'])} features")
     print(f"   ✓ Random Forest selected {len(selected_features['random_forest'])} features")

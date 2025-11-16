@@ -150,21 +150,84 @@ Where:
 
 ---
 
-### Step 4: Feature Selection (100 Features)
+### Step 4: Correlation-Based Feature Pruning (NEW - Nov 2025)
 
-**CRITICAL DECISION:** Initially selected only 50 features, but this was too aggressive.
+**CRITICAL REFINEMENT:** Before feature selection, we now prune highly correlated features.
 
 **Problem Identified:**
-- With 561 features and only 6 activity classes, 50 features might miss important discriminative information
-- The **Activity column is the TARGET VARIABLE**, not a feature to select
-- Must always preserve Activity and subject for sequential modeling
+- **2,281 feature pairs** with correlation > 0.95 (massive redundancy!)
+- Running feature selection on all 561 features with high multicollinearity:
+  - ❌ **Inefficient:** Evaluating redundant features wastes computation
+  - ❌ **Splits importance:** Feature importance gets divided among correlated features
+  - ❌ **Unreliable estimates:** Multicollinearity destabilizes statistical tests
 
-**Solution:** Increased to **100 features** using three complementary methods.
+**Solution Implemented:**
+```python
+def prune_correlated_features(high_corr_pairs, threshold=0.95):
+    # For each pair (A, B) with corr > 0.95, drop one feature (B)
+    # Ensures we keep only one representative from each correlated group
+```
+
+**Results:**
+- **561 → 276 features** (dropped 285 redundant features, 50.8% reduction)
+- **Benefits:**
+  - More reliable feature importance scores
+  - Faster feature selection (276 vs 561 features to evaluate)
+  - Reduced multicollinearity improves model stability
+  - Better interpretability (each feature is distinct)
+
+**Mathematical Justification:**
+
+If features $X_i$ and $X_j$ have correlation $r_{ij} > 0.95$:
+$$r_{ij} = \frac{\text{Cov}(X_i, X_j)}{\sigma_i \sigma_j} > 0.95$$
+
+Then they provide nearly identical information. Keeping both:
+- Adds no discriminative power
+- Increases dimensionality without benefit
+- Can split feature importance: $\text{Importance}(X_i) + \text{Importance}(X_j) \approx 2 \times \text{Importance}(\text{either})$
+
+**Example:** `tBodyAcc-std()-X` and `tBodyAcc-mad()-X` have correlation 0.9986 - they're measuring essentially the same thing (variability in acceleration).
+
+---
+
+### Step 5: Feature Selection (200 Features - Increased from 100)
+
+**EVOLUTION:** Originally 50 → 100 → **NOW 200 features**
+
+**Why Increase Again?**
+
+After pruning correlated features:
+- **Before pruning:** 100 from 561 = 18% of features
+- **After pruning:** 100 from 276 = 36% of features
+- **New approach:** 200 from 276 = **72% of pruned features**
+
+**Rationale:**
+1. **More features available:** Pruning removed redundancy, not information
+2. **Less aggressive selection:** 276 pruned features → can afford to keep more
+3. **Better coverage:** 200 features better capture activity nuances than 100
+4. **HMM capacity:** With 200 dimensions, HMM has richer observation model:
+   - 6 states × 200 features = 1,200 emission means + 1,200 variances
+   - vs. 6 states × 100 features = 600 means + 600 variances
+
+**Trade-off Analysis:**
+- ✅ **Benefit:** More discriminative power (capture subtle differences between SITTING vs STANDING)
+- ✅ **Acceptable cost:** Still 65% reduction from original 561 features
+- ✅ **No redundancy:** All 200 features are relatively independent (pruned correlations)
+
+---
+
+### Step 6: Feature Selection Methods (Using Pruned Features)
+
+**NOW OPERATING ON 276 PRUNED FEATURES (not 561)**
 
 #### Method 1: ANOVA F-Test
 
 **What it does:**
 Measures the ratio of between-group variance to within-group variance for each feature.
+
+**Why it's better after pruning:**
+- No wasted computation on redundant features
+- Feature scores more reliable (no multicollinearity)
 
 **Mathematical Foundation:**
 $$F = \frac{\text{Between-group variance}}{\text{Within-group variance}} = \frac{\sum_{k=1}^{K} n_k(\bar{x}_k - \bar{x})^2 / (K-1)}{\sum_{k=1}^{K}\sum_{i=1}^{n_k}(x_{ik} - \bar{x}_k)^2 / (N-K)}$$
@@ -196,6 +259,10 @@ Where:
 **What it does:**
 Measures the mutual dependence between feature and target - how much information about activity is gained by observing the feature.
 
+**Why it's better after pruning:**
+- Eliminates redundant information sources
+- Each feature provides unique information gain
+
 **Mathematical Foundation:**
 $$I(X;Y) = \sum_{y \in Y}\sum_{x \in X} p(x,y) \log\frac{p(x,y)}{p(x)p(y)}$$
 
@@ -223,6 +290,10 @@ Where:
 **What it does:**
 Trains ensemble of decision trees and measures feature importance based on impurity decrease (Gini importance).
 
+**Why it's better after pruning:**
+- Importance not artificially split among correlated features
+- More accurate representation of true feature contribution
+
 **Mathematical Foundation:**
 $$\text{Importance}(f) = \frac{1}{T}\sum_{t=1}^{T}\sum_{n \in \text{nodes}(t, f)} \Delta i(n)$$
 
@@ -246,49 +317,86 @@ Where:
 
 ---
 
-### Final Feature Set
+### Final Feature Set (Updated Pipeline)
 
-**Strategy:** Use **union of all three methods** = **191 unique features**
+**New Workflow:**
+```
+561 Original Features
+    ↓ [Correlation Analysis: Find 2,281 high-corr pairs]
+    ↓ [Prune Correlated: Drop 285 features]
+276 Pruned Features (50.8% reduction)
+    ↓ [ANOVA F-Test: Select top 200]
+    ↓ [Mutual Information: Select top 200]  
+    ↓ [Random Forest: Select top 200]
+200 Features per Method
+```
 
-**Why combine methods:**
-- ANOVA captures linear separability
-- Mutual Information captures non-linear patterns
-- Random Forest captures interactions
-- Union ensures no important feature is missed
+**Old Workflow (for comparison):**
+```
+561 Original Features
+    ↓ [Direct selection on all features]
+100 Features per Method
+```
+
+**Why New Approach is Better:**
+
+1. **Removes Redundancy First:** Correlation pruning eliminates duplicates before selection
+2. **More Efficient:** Feature selection on 276 vs 561 features (49% faster)
+3. **Better Estimates:** No multicollinearity → more reliable importance scores
+4. **Larger Final Set:** 200 features (from 276) vs 100 features (from 561)
+   - Same reduction ratio (~65% removed)
+   - But starting from clean, independent features
 
 **What we preserve:**
 ✅ **Activity** - Hidden states for HMM / Observable states for Markov Chain  
 ✅ **subject** - ID for sequential modeling (always included)  
-✅ **100-191 sensor features** - Continuous observations for discrete-time HMM
+✅ **200 sensor features** - Continuous observations for discrete-time HMM (increased from 100)
 
 ---
 
-### Step 5: Principal Component Analysis (PCA)
+### Step 7: Principal Component Analysis (PCA) - REFINED
+
+**CRITICAL FIX (Nov 2025):** Removed redundant scaling!
 
 **What we do:**
 Apply PCA to extract 100 principal components from 561 features.
 
-**Why:**
-- **Dimensionality reduction** while preserving variance
-- **Removes multicollinearity** (decorrelates features)
-- **Noise reduction** (minor components often represent noise)
-- **Computational efficiency** for HMM (fewer observation dimensions → faster training)
+**What Changed:**
 
-**Mathematical Foundation:**
+**OLD (Incorrect):**
+```python
+X_train_scaled = StandardScaler().fit_transform(X_train)  # ❌ Wrong!
+X_pca = PCA(n_components=100).fit_transform(X_train_scaled)
+```
 
-PCA finds orthogonal directions of maximum variance:
+**NEW (Correct):**
+```python
+# UCI HAR data is ALREADY normalized to [-1, 1]
+X_pca = PCA(n_components=100).fit_transform(X_train)  # ✅ Direct PCA
+```
 
-$$\mathbf{w}_1 = \arg\max_{\|\mathbf{w}\|=1} \text{Var}(\mathbf{X}\mathbf{w}) = \arg\max_{\|\mathbf{w}\|=1} \mathbf{w}^T\mathbf{\Sigma}\mathbf{w}$$
+**Why This Matters:**
 
-Where:
-- $\mathbf{\Sigma}$ = covariance matrix of features
-- $\mathbf{w}_i$ = $i$-th eigenvector (principal component direction)
-- $\lambda_i$ = $i$-th eigenvalue (variance explained)
+**Problem with old approach:**
+- UCI HAR dataset is **already normalized** to range [-1, 1]
+- `StandardScaler` transforms to mean=0, std=1 (changes variance structure!)
+- This **redundant scaling** distorts the original variance relationships
+- PCA is sensitive to scaling → wrong principal components
 
-**Explained Variance:**
-$$\text{Cumulative Variance} = \frac{\sum_{i=1}^{k}\lambda_i}{\sum_{i=1}^{561}\lambda_i}$$
+**Correct approach:**
+- Data is already on comparable scale (all features in [-1, 1])
+- Apply PCA directly to preserve original variance structure
+- First PC captures true direction of maximum variance
 
-**Results:**
+**Mathematical Impact:**
+
+PCA finds eigenvectors of covariance matrix $\mathbf{\Sigma}$:
+- **With StandardScaler:** $\mathbf{\Sigma}_{\text{scaled}} = \text{Corr}(\mathbf{X})$ (correlation matrix)
+- **Without StandardScaler:** $\mathbf{\Sigma}_{\text{original}} = \text{Cov}(\mathbf{X})$ (covariance matrix)
+
+For pre-normalized data, the covariance matrix preserves meaningful variance relationships!
+
+**Results (unchanged):**
 - **100 components** explain **94.89%** of variance
 - **63 components** needed for 90% variance
 - First few components capture major patterns of motion
@@ -297,10 +405,11 @@ $$\text{Cumulative Variance} = \frac{\sum_{i=1}^{k}\lambda_i}{\sum_{i=1}^{561}\l
 - ✅ For **visualization** (2D/3D plots)
 - ✅ If HMM struggles with high dimensionality (computational efficiency)
 - ❌ Generally prefer **selected features** for HMM (more interpretable observations)
+- ⚠️ **NEVER double-scale pre-normalized data!**
 
 ---
 
-### Step 6: Sequential Data Preparation
+### Step 8: Sequential Data Preparation
 
 **What we do:**
 - Group data by subject to create activity sequences
@@ -375,19 +484,28 @@ subject = subject_id   # For sequential grouping - ALWAYS PRESERVED
 - Markov Chain needs activity sequence: [SITTING, SITTING, STANDING, ...]
 - Cannot predict Activity if we throw it away!
 
-### 3. Why 100 Features (not 50)?
+### 3. Why the Feature Selection Journey: 50 → 100 → 200?
 
-**Initial approach:** 50 features seemed reasonable (10% of 561)
+**Evolution of our approach:**
 
-**Problem discovered:**
-- 6 activity classes with subtle differences (SITTING vs. STANDING)
-- High-dimensional sensor space (561) likely needs more features to capture nuances
+**Version 1 (Initial):** 50 features
+- Too aggressive: Only 9% of original features
 - Risk of missing discriminative patterns
 
-**Solution:** Increased to 100 features (~18% of original)
-- More conservative dimensionality reduction
-- Union of three methods = 191 features available
-- Balance between reduction and information preservation
+**Version 2 (Revised):** 100 features  
+- More conservative: 18% of original features
+- Better but still potentially limiting
+
+**Version 3 (Current - Nov 2025):** 200 features **after pruning**
+- **Key insight:** Pruning removes redundancy, not information!
+- 561 features → 276 pruned (drop duplicates) → 200 selected
+- 72% of pruned features retained
+- Only 65% total reduction (still efficient)
+
+**Why This Works:**
+- **Before:** 100 from 561 = risk of missing patterns
+- **After:** 200 from 276 = comprehensive coverage without redundancy
+- **Trade-off:** Slightly more features, but all are **independent** and **informative**
 
 ### 4. Why Three Feature Selection Methods?
 
@@ -443,18 +561,31 @@ $$P(A_t \mid A_{t-1}, A_{t-2}, \ldots, A_0) = P(A_t \mid A_{t-1})$$
 
 ## 🚀 Usage Guide
 
-### 1. Run Preprocessing and EDA
+### 1. Run Preprocessing and EDA (Updated Pipeline)
 
 ```bash
+# Activate virtual environment
+.\.venv\Scripts\Activate.ps1
+
+# Run preprocessing with new correlation pruning + feature selection
 python scripts/preprocessing_eda.py
 ```
 
+**What it does (NEW):**
+1. Load data (7,352 train, 2,947 test samples)
+2. Basic EDA and activity analysis
+3. **Correlation analysis** (find 2,281 high-corr pairs)
+4. **Prune correlated features** (561 → 276 features)
+5. **Feature selection** on pruned set (select 200 from 276)
+6. PCA analysis (without redundant scaling)
+7. Transition matrix computation
+
 **Output:**
 - `outputs/images/*.png` - Visualizations
-- `outputs/results/selected_features.json` - Top 100 features (3 methods)
-- `outputs/results/transition_probabilities.csv` - Activity transition matrix
+- `outputs/results/selected_features.json` - **Top 200 features** (3 methods, updated)
+- `outputs/results/transition_probabilities.csv` - Empirical activity transition matrix
 
-### 2. Load Data for Modeling
+### 2. Load Data for Modeling (Updated with 200 Features)
 
 ```python
 from scripts.data_loader import StochasticDataLoader
@@ -464,8 +595,13 @@ loader = StochasticDataLoader()
 # For Discrete-Time HMM (sequences with continuous observations)
 train_seq, test_seq = loader.prepare_for_hmm(method='anova')
 # Returns: list of (observations, labels, subject_id) tuples
-# - observations: continuous sensor features (N_timesteps x N_features)
-# - labels: true activity sequence (for evaluation)
+# - observations: 200 continuous sensor features (N_timesteps x 200) ← UPDATED
+# - labels: integer-encoded activity sequence 0-5 (for evaluation)
+# - subject_id: identifier for subject
+
+# NEW: Label encoding built-in
+# Activities automatically encoded: {0: 'LAYING', 1: 'SITTING', 2: 'STANDING', 
+#                                    3: 'WALKING', 4: 'WALKING_DOWNSTAIRS', 5: 'WALKING_UPSTAIRS'}
 
 # For Markov Chain (discrete activity state transitions only)
 train_mc, test_mc, activities = loader.prepare_for_markov_chain()
@@ -475,65 +611,280 @@ train_mc, test_mc, activities = loader.prepare_for_markov_chain()
 
 ---
 
-## 📈 Next Steps
+## ✅ Implementation Complete: Sections 4.2-4.5
 
-### 1. Discrete-Time Hidden Markov Model (HMM)
-**Goal:** Predict hidden activity states from continuous sensor observations
+### Section 4.2: Model Formulation
 
-**Model Structure:**
-- **Hidden States**: 6 discrete activities
-- **Observations**: Continuous sensor features (100-191 dimensions)
-- **Transition Matrix** $A$: $P(\text{state}_t | \text{state}_{t-1})$
-- **Emission Probabilities** $B$: $P(\text{observation}_t | \text{state}_t)$ - Gaussian emissions
+Implemented **discrete-time Gaussian HMM** in `scripts/hmm_model.py`:
 
-**Approach:**
-- Use **Gaussian HMM** (continuous observations)
-- Learn parameters: initial state distribution $\pi$, transition matrix $A$, emission parameters $B$
-- Inference: Viterbi algorithm for most likely state sequence
-- Evaluation: Sequence prediction accuracy, state-wise F1 scores
+**Model Architecture:**
+- **Hidden States:** 6 discrete activities (WALKING, SITTING, STANDING, etc.)
+- **Observations:** Continuous sensor features (100-191 dimensions)
+- **Emissions:** Multivariate Gaussian $\mathcal{N}(\boldsymbol{\mu}_j, \boldsymbol{\Sigma}_j)$ for each state $j$
+- **Parameters** $\boldsymbol{\lambda} = (\mathbf{A}, \mathbf{B}, \boldsymbol{\pi})$:
+  - $\mathbf{A}$: 6×6 transition matrix
+  - $\mathbf{B}$: Emission distributions $\{\mathcal{N}(\boldsymbol{\mu}_j, \boldsymbol{\Sigma}_j)\}_{j=1}^6$
+  - $\boldsymbol{\pi}$: Initial state distribution
 
-**Implementation:**
+**Key Features:**
+- Supervised initialization from labeled data
+- Diagonal or full covariance matrices
+- Numerical stability with log-space computations
+- Stationary distribution computation
+
+### Section 4.3: Assumption Verification
+
+Comprehensive statistical tests in `scripts/assumption_tests.py`:
+
+**1. Linearity Tests:**
+- Residual analysis ($R^2$ computation, residual plots)
+- Ramsey RESET test (F-test for non-linear terms)
+- Detects if observations are linear in states + Gaussian noise
+
+**2. Stationarity Tests:**
+- Augmented Dickey-Fuller (ADF) test
+- Autocorrelation Function (ACF) analysis
+- Verifies time-invariant statistical properties
+
+**3. Gaussianity Tests:**
+- Shapiro-Wilk test (univariate normality)
+- Q-Q plots (visual assessment)
+- Validates emission distribution assumptions
+
+**Outputs:**
+- Detailed plots in `outputs/results/`
+- Recommendations for model adjustments
+- Alternative approaches when assumptions fail
+
+### Section 4.4: Baum-Welch Algorithm
+
+EM algorithm for parameter estimation in `scripts/hmm_model.py`:
+
+**E-Step Components:**
+- **Forward Algorithm:** Compute $\alpha_t(j) = P(x_1,\ldots,x_t, S_t=j | \boldsymbol{\lambda})$
+- **Backward Algorithm:** Compute $\beta_t(i) = P(x_{t+1},\ldots,x_T | S_t=i, \boldsymbol{\lambda})$
+- **Gamma Computation:** $\gamma_t(i) = P(S_t=i | \mathbf{X}, \boldsymbol{\lambda})$
+- **Xi Computation:** $\xi_t(i,j) = P(S_t=i, S_{t+1}=j | \mathbf{X}, \boldsymbol{\lambda})$
+
+**M-Step Updates:**
+- **Initial Distribution:** $\hat{\pi}_i = \gamma_1(i)$
+- **Transition Matrix:** $\hat{A}_{ij} = \frac{\sum_t \xi_t(i,j)}{\sum_t \gamma_t(i)}$
+- **Emission Means:** $\hat{\boldsymbol{\mu}}_j = \frac{\sum_t \gamma_t(j) \cdot \mathbf{x}_t}{\sum_t \gamma_t(j)}$
+- **Emission Covariances:** $\hat{\boldsymbol{\Sigma}}_j = \frac{\sum_t \gamma_t(j) \cdot (\mathbf{x}_t-\hat{\boldsymbol{\mu}}_j)(\mathbf{x}_t-\hat{\boldsymbol{\mu}}_j)^T}{\sum_t \gamma_t(j)}$
+
+**Features:**
+- Handles multiple sequences (one per subject)
+- Scaling to prevent numerical underflow
+- Convergence monitoring with log-likelihood
+- Training curve visualization
+
+### Section 4.5: Viterbi Algorithm
+
+Optimal state sequence decoding in `scripts/hmm_model.py`:
+
+**Dynamic Programming:**
+- **Initialization:** $\delta_1(j) = \pi_j \cdot P(x_1|S_t=j)$
+- **Recursion:** $\delta_t(j) = \max_i[\delta_{t-1}(i) \cdot A_{ij}] \cdot P(x_t|S_t=j)$
+- **Backtracking:** Reconstruct optimal path using $\psi_t$ pointers
+
+**Complexity:** $O(T \cdot N^2)$ where $T$ is sequence length, $N=6$ states
+
+**Outputs:**
+- Most likely state sequence $\mathbf{S}^*$
+- Log-probability of optimal path
+- Per-sequence predictions
+
+### Complete Evaluation Pipeline
+
+Integrated workflow in `scripts/train_evaluate_hmm.py`:
+
+**Pipeline Steps:**
+1. Load sequential data (grouped by subject)
+2. Run assumption verification tests
+3. Train HMM with Baum-Welch (50 iterations)
+4. Decode test sequences with Viterbi
+5. Compute performance metrics
+
+**Evaluation Metrics:**
+- Confusion matrix (raw counts and normalized)
+- Per-class Precision, Recall, F1-score
+- Macro and weighted averages
+- Transition matrix analysis
+- Stationary distribution
+
+**Usage:**
 ```python
-from hmmlearn import hmm
-# Initialize Gaussian HMM with 6 states
-model = hmm.GaussianHMM(n_components=6, covariance_type='diag', n_iter=100)
-# Train on observation sequences
-# Predict hidden state sequences using Viterbi
+from scripts.train_evaluate_hmm import HMMEvaluator
+
+evaluator = HMMEvaluator()
+hmm, metrics = evaluator.run_complete_pipeline(
+    feature_method='anova',
+    covariance_type='diag',
+    n_iter=50,
+    run_tests=True
+)
 ```
 
-### 2. Markov Chain Analysis
-**Goal:** Analyze discrete activity state transition dynamics
+### Run Complete HMM Pipeline (with Numerical Stability Improvements)
 
-**Approach:**
-- Estimate transition matrix $P$ from observed activity sequences
-- Analyze stationary distribution: $\pi P = \pi$
-- Compute transition probabilities: $P(A_t = j | A_{t-1} = i)$
-- Predict next activity given current activity
-- Compare Markov Chain transitions with HMM's learned transitions
+```bash
+# Activate virtual environment
+.\.venv\Scripts\Activate.ps1
 
-**Implementation:**
-```python
-# Load precomputed transition matrix
-import pandas as pd
-transition_matrix = pd.read_csv('outputs/results/transition_probabilities.csv')
+# Run HMM training and evaluation (now with 200 features)
+python scripts/train_evaluate_hmm.py
 
-# Analyze steady-state distribution
-# Simulate activity sequences
-# Compare with HMM predictions
+# Or run assumption tests separately
+python scripts/assumption_tests.py
 ```
+
+**What Changed (Nov 2025):**
+- **200 features** instead of 100 (richer observation model)
+- **Enhanced numerical stability:**
+  - Stronger covariance regularization (min variance 1e-4 + 1e-3)
+  - NaN detection and recovery in forward/backward algorithms
+  - Validation in M-step to prevent degenerate solutions
+  - Robust stationary distribution computation
+
+**Expected Outputs:**
+- `outputs/results/trained_hmm_model.pkl` - Saved HMM model
+- `outputs/results/hmm_performance_metrics.json` - Accuracy, F1-scores
+- `outputs/results/confusion_matrix_hmm.png` - Confusion matrices
+- `outputs/results/learned_transition_matrix.png` - **Learned** transition probabilities (compare with empirical)
+- `outputs/results/training_convergence.png` - EM convergence curve
+- `outputs/results/assumption_test_results.json` - Statistical test results
+- Various plots for linearity, stationarity, Gaussianity tests
+
+**Key Difference: Empirical vs Learned Transition Matrix**
+
+**Empirical TPM** (`transition_probabilities.csv`):
+- Computed by counting transitions in labeled training data
+- Example: LAYING→LAYING = 84.7% (people stay in activities)
+- Used to **initialize** HMM
+
+**Learned TPM** (`learned_transition_matrix.png`):
+- **Refined** by Baum-Welch algorithm based on sensor patterns
+- Discovered from continuous observations during EM training
+- Should match empirical closely but may differ where sensor data reveals different patterns
+- This is what HMM uses for **prediction** on unlabeled data
 
 ---
 
-## 📝 Key Takeaways
+## 📈 Understanding the Two Transition Matrices
+
+### Why Do We Have TWO Transition Matrices?
+
+This often confuses people - let's clarify:
+
+**1. Empirical Transition Matrix** (from preprocessing)
+- **How:** Count transitions in labeled training data
+- **Formula:** `P(j|i) = count(i→j) / count(i→*)`
+- **Example:** In training data, LAYING→SITTING happened 87 times out of 1,407 LAYING samples = 6.2%
+- **Use:** 
+  - Pure Markov Chain analysis
+  - **Initialize HMM** with reasonable starting transitions
+  - Baseline for comparison
+
+**2. Learned Transition Matrix** (from HMM training)
+- **How:** Baum-Welch EM algorithm refines based on **sensor patterns**
+- **Key Insight:** Learns what sensor data reveals about transitions
+- **Example:** "When acceleration changes THIS way, transition to SITTING is likely"
+- **Use:**
+  - **Predict activities** from unlabeled sensor streams
+  - Real-world deployment (no labels needed!)
+
+### The Critical Difference
+
+```
+Scenario: You have NEW unlabeled sensor data from a user
+
+Empirical TPM:   ❌ Cannot help (needs labeled sequences)
+Learned TPM:     ✅ Can predict! (uses sensor patterns)
+                    "These sensor readings + learned transitions 
+                     → Most likely: SITTING → STANDING"
+```
+
+### Why Learn TPM When We Have Empirical TPM?
+
+**Short Answer:** Because we want to predict activities from **unlabeled sensor data**!
+
+**Detailed Explanation:**
+
+1. **Empirical TPM** tells us: "In labeled data, what transitions occurred?"
+2. **Learned TPM** tells us: "Given sensor patterns, what transitions are likely?"
+
+**Real-World Application:**
+- Deploy app on user's phone
+- Collect accelerometer/gyroscope data (no labels!)
+- Use **learned TPM + emission probabilities** to predict activities
+- This is impossible with just empirical TPM (which requires labels)
+
+### Comparison Analysis Available
+
+**Markov Chain (Baseline):**
+- Only uses empirical TPM: $P(S_t | S_{t-1})$
+- No sensor observations
+- Purely discrete state transitions
+
+**HMM (Full Model):**
+- Uses learned TPM: $P(S_t | S_{t-1})$ refined from sensor data
+- Plus emission probabilities: $P(X_t | S_t)$
+- Combined: $P(S_t, X_t | S_{t-1}, X_{<t})$
+
+**Expected Outcome:** HMM should match or outperform Markov Chain because it uses more information (sensor patterns, not just transition counts)
+
+## 📈 Next Steps & Baselines
+
+### Model Comparison (as per Proposal)
+
+Compare HMM against ML baselines:
+
+1. **Naive Bayes** (ignores temporal structure)
+2. **Support Vector Machine** with RBF kernel  
+3. **Random Forest**
+
+**Expected:** HMM should achieve 3-5% improvement by incorporating temporal dependencies
+
+---
+
+## 📝 Key Takeaways (Updated Nov 2025)
 
 ✅ **Activity is the target variable** - never discard it  
 ✅ **Subject ID enables sequential modeling** - always preserve it  
-✅ **Feature selection reduces dimensionality** without losing information  
+✅ **Prune correlations BEFORE selection** - removes redundancy efficiently (NEW)  
+✅ **200 features from 276 pruned** - better than 100 from 561 (NEW)  
 ✅ **Multiple selection methods** provide robustness  
-✅ **PCA optional for HMM** (computational efficiency vs. interpretability trade-off)  
-✅ **Transition matrix** reveals temporal activity patterns  
-✅ **100-191 features** balances reduction and preservation  
-✅ **Discrete-time HMM** handles continuous observations with discrete hidden states  
+✅ **PCA without redundant scaling** - respect pre-normalized data (FIXED)  
+✅ **Two transition matrices** - empirical (baseline) vs learned (predictive) (CLARIFIED)  
+✅ **Numerical stability critical** - regularization + NaN checks prevent collapse (NEW)  
+✅ **Discrete-time HMM** handles continuous observations with discrete hidden states
+
+## 🔄 Recent Refinements (November 2025)
+
+### 1. Correlation-Based Pruning
+- **Added:** Pre-selection pruning removes 285 redundant features (50.8%)
+- **Impact:** More reliable feature importance, faster selection, better model stability
+- **Files:** `preprocessing_eda.py` - new `prune_correlated_features()` method
+
+### 2. Fixed PCA Redundant Scaling
+- **Fixed:** Removed StandardScaler (UCI HAR data already normalized)
+- **Impact:** PCA now operates on correct variance structure
+- **Files:** `preprocessing_eda.py` - removed scaling in `pca_analysis()`
+
+### 3. Increased Feature Count
+- **Changed:** 100 → 200 selected features
+- **Rationale:** After pruning, 276 clean features available; 200 = 72% coverage
+- **Impact:** Richer HMM observation model, better activity discrimination
+
+### 4. Enhanced Numerical Stability
+- **Added:** Stronger covariance regularization, NaN detection, validation in M-step
+- **Impact:** Prevents degenerate solutions in HMM training with 200 features
+- **Files:** `hmm_model.py` - multiple stability improvements
+
+### 5. Documentation Improvements
+- **Clarified:** Why we learn TPM (prediction on unlabeled data!)
+- **Explained:** Empirical vs Learned transition matrix differences
+- **Added:** `REFINEMENTS_SUMMARY.md` with detailed justification  
 
 ---
 

@@ -30,11 +30,6 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Project specific - temporary outputs
-outputs/images/*.png
-outputs/results/*.json
-outputs/results/*.csv
-
 # Keep directory structure but not files
 !outputs/images/.gitkeep
 !outputs/results/.gitkeep

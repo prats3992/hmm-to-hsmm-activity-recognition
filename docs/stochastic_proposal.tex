@@ -1,0 +1,784 @@
+\documentclass[11pt,a4paper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{natbib}
+\usepackage{xcolor}
+
+% Hyperref setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+% Header and footer
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{HAR Using HMMs}
+\lhead{Project Proposal}
+\cfoot{\thepage}
+
+% Title formatting
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\itshape}{\thesubsubsection}{1em}{}
+
+% Custom commands
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\bs}{\mathbf{s}}
+\newcommand{\bmu}{\boldsymbol{\mu}}
+\newcommand{\bSigma}{\boldsymbol{\Sigma}}
+\newcommand{\bpi}{\boldsymbol{\pi}}
+\newcommand{\blambda}{\boldsymbol{\lambda}}
+\newcommand{\bA}{\mathbf{A}}
+\newcommand{\bB}{\mathbf{B}}
+\newcommand{\bepsilon}{\boldsymbol{\epsilon}}
+
+\begin{document}
+
+% Title page
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    
+    {\LARGE\bfseries Project Proposal\par}
+    \vspace{1cm}
+    {\Huge\bfseries Human Activity Recognition Using Hidden Markov Models\par}
+    \vspace{2cm}
+    
+    {\Large\itshape Pratham Arora, Vaisakh Menon\par}
+    % \vspace{0.5cm}
+    % \vspace{1cm}
+    
+    {\large \today\par}
+    
+    \vfill
+    
+    {\large Course: Stochastic Process for Data Science and Engineering\par}
+    {\large Instructors: Sagar Pandhare, T.V. Ramanathan\par}
+    
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Introduction and Motivation}
+
+Human activity recognition has become increasingly important in healthcare monitoring, fitness tracking, elderly care assistance, and smart home applications. The ability to automatically identify physical activities from smartphone sensor data enables personalized health interventions, fall detection systems, and behavioral pattern analysis for patient monitoring.
+
+Traditional machine learning approaches treat activity classification as a static pattern recognition problem, ignoring the temporal dependencies between consecutive activities. However, human activities follow natural sequential patterns—for example, a person is more likely to transition from ``standing'' to ``walking'' than from ``laying'' to ``walking upstairs.'' Hidden Markov Models provide a principled probabilistic framework to capture these temporal dynamics by modeling both the observed sensor measurements and the hidden activity states that generate them.
+
+The \textbf{hidden states} in this context are the discrete activity labels (walking, sitting, standing, etc.) which are not directly observable from raw accelerometer and gyroscope readings. These latent activity labels must be inferred statistically from noisy, continuous sensor data through probabilistic inference techniques. State space models offer advantages over standard classifiers by incorporating temporal structure, enabling smoothing of noisy predictions, and providing interpretable transition probabilities between activities.
+
+\section{Objectives}
+
+The primary objectives of this project are:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Identify hidden activity states} from continuous smartphone sensor data using Hidden Markov Models, explicitly defining which states are hidden and why they cannot be directly observed.
+    
+    \item \textbf{Model temporal dependencies} between consecutive activities through a first-order Markov chain with transition probabilities learned from data.
+    
+    \item \textbf{Implement and compare} the Baum-Welch Expectation-Maximization algorithm for parameter estimation and the Viterbi algorithm for optimal state sequence decoding.
+    
+    \item \textbf{Verify model assumptions} including Gaussian emission distributions, linearity of the observation model, stationarity of sensor features, and the Markovian property through statistical tests, providing clear alternatives when assumptions fail.
+    
+    \item \textbf{Evaluate model performance} using classification accuracy, confusion matrices, and per-activity precision/recall metrics on the UCI-HAR benchmark dataset.
+\end{enumerate}
+
+\section{Dataset Description}
+
+\subsection{Source}
+
+\textbf{UCI Human Activity Recognition Using Smartphones Dataset}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Original Repository:} \url{https://archive.ics.uci.edu/dataset/240/human+activity+recognition+using+smartphones}
+    \item \textbf{Kaggle Mirror:} \url{https://www.kaggle.com/datasets/uciml/human-activity-recognition-with-smartphones}
+    \item \textbf{Size:} 58.2 MB (preprocessed features)
+    \item \textbf{Format:} Text files with space-separated values
+\end{itemize}
+
+\subsection{Data Collection Details}
+
+The dataset was collected from \textbf{30 volunteers} aged 19--48 years performing six activities while wearing a Samsung Galaxy S II smartphone on their waist. The activities were video-recorded and manually labeled by researchers, providing ground truth labels for supervised learning.
+
+\textbf{Sampling specifications:}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Sensor sampling rate:} 50 Hz
+    \item \textbf{Windowing:} 2.56-second sliding windows with 50\% overlap (128 samples per window)
+    \item \textbf{Butterworth filter:} Applied with 0.3 Hz cutoff to separate body acceleration from gravitational acceleration
+\end{itemize}
+
+\subsection{Activity Classes (Hidden States)}
+
+The six discrete activity labels represent the \textbf{hidden states} in our HMM:
+
+\begin{enumerate}
+    \item \textbf{WALKING} -- Normal walking on flat surface
+    \item \textbf{WALKING\_UPSTAIRS} -- Ascending stairs
+    \item \textbf{WALKING\_DOWNSTAIRS} -- Descending stairs
+    \item \textbf{SITTING} -- Seated position
+    \item \textbf{STANDING} -- Standing still
+    \item \textbf{LAYING} -- Lying down
+\end{enumerate}
+
+\textbf{Why these states are hidden:} The smartphone sensors measure continuous physical quantities (acceleration in $m/s^2$, angular velocity in $rad/s$), not categorical activity labels. The true activity performed by the subject is a \textbf{latent cognitive intention} that generates observable sensor patterns through physical motion. Multiple activities can produce overlapping sensor signatures (e.g., sitting vs.\ standing both have low acceleration), and sensor noise further obscures the true underlying activity. Statistical inference is required to probabilistically map from continuous observations to discrete activity states.
+
+\subsection{Feature Vector (Observations)}
+
+Each time window provides a \textbf{561-dimensional feature vector} extracted from raw sensor signals:
+
+\textbf{Time-domain features} (40 features per sensor axis):
+\begin{itemize}[leftmargin=*]
+    \item Mean, standard deviation, median absolute deviation
+    \item Maximum, minimum, signal magnitude area
+    \item Energy, interquartile range, signal entropy
+    \item Autoregression coefficients (4th order)
+\end{itemize}
+
+\textbf{Frequency-domain features} (FFT applied):
+\begin{itemize}[leftmargin=*]
+    \item Spectral energy, spectral entropy
+    \item Maximum frequency component
+    \item Frequency signal skewness and kurtosis
+\end{itemize}
+
+\textbf{Additional derived features:}
+\begin{itemize}[leftmargin=*]
+    \item Correlation coefficients between sensor axes
+    \item Angles between sensor vectors and gravity
+    \item Jerk signals (time derivatives of acceleration)
+\end{itemize}
+
+\textbf{Data split:}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Training set:} 7,352 samples (70\% of data, 21 subjects)
+    \item \textbf{Test set:} 2,947 samples (30\% of data, 9 subjects)
+\end{itemize}
+
+The dataset creators ensured that subjects are partitioned between training and test sets (no subject appears in both), making this a \textbf{subject-independent} evaluation that tests generalization to new individuals.
+
+\section{Methodology}
+
+\subsection{Discrete-Time Specification}
+
+This project uses a \textbf{discrete-time Hidden Markov Model} because sensor data is sampled at fixed intervals and aggregated into non-overlapping time windows. Each 2.56-second window represents one discrete time step $t$, containing 128 raw sensor samples that are transformed into a single 561-dimensional feature vector.
+
+The choice of discrete-time modeling is justified because:
+\begin{itemize}[leftmargin=*]
+    \item Human activities exhibit piecewise stationary behavior within short windows
+    \item Computational efficiency (discrete models scale better than continuous-time)
+    \item Alignment with how real-world activity recognition systems operate (periodic classification)
+\end{itemize}
+
+\subsection{Model Formulation}
+
+\subsubsection{Hidden State Definition}
+
+Let $S_t \in \{1, 2, 3, 4, 5, 6\}$ denote the hidden activity state at time $t$. The state follows a \textbf{first-order Markov chain}:
+\begin{equation}
+P(S_t = j \mid S_1, \ldots, S_{t-1}) = P(S_t = j \mid S_{t-1})
+\end{equation}
+
+This \textbf{Markovian assumption} states that the current activity depends only on the immediate previous activity, not the entire history. This is reasonable for activity recognition because:
+\begin{itemize}[leftmargin=*]
+    \item Activities have characteristic durations (people don't switch activities every second)
+    \item Immediate context (previous action) predicts current action better than distant history
+    \item Reduces model complexity from exponential to linear in sequence length
+\end{itemize}
+
+\textbf{Verification of Markov property:} Compare models with different memory lengths using Akaike Information Criterion (AIC):
+\begin{equation}
+\text{AIC} = 2k - 2\log P(\text{data} \mid \text{model})
+\end{equation}
+where $k$ is the number of parameters. If first-order HMM has lower AIC than second-order, the Markov assumption is justified.
+
+\subsubsection{State Transition Model}
+
+The probability of transitioning from activity $i$ to activity $j$ is given by the \textbf{transition matrix} $\bA = [A_{ij}]_{6 \times 6}$:
+\begin{equation}
+A_{ij} = P(S_t = j \mid S_{t-1} = i)
+\end{equation}
+
+\textbf{Constraints:}
+\begin{itemize}[leftmargin=*]
+    \item $A_{ij} \geq 0$ for all $i, j$ (probabilities are non-negative)
+    \item $\sum_{j=1}^{6} A_{ij} = 1$ for all $i$ (row-stochastic matrix)
+\end{itemize}
+
+\textbf{Physical interpretation:} Diagonal elements $A_{ii}$ represent \textbf{self-transition probabilities} (staying in the same activity), which should be high because activities have persistence. Off-diagonal elements represent \textbf{activity switches}, which should be lower and structured (e.g., $A_{\text{sitting}, \text{laying}}$ should be low because people rarely go from sitting directly to laying without standing first).
+
+\subsubsection{Observation Model}
+
+The observation at time $t$ is a feature vector $\bx_t \in \R^{561}$. We model the emission probability as \textbf{multivariate Gaussian}:
+\begin{equation}
+P(\bx_t \mid S_t = j) = \mathcal{N}(\bx_t; \bmu_j, \bSigma_j)
+\end{equation}
+where:
+\begin{itemize}[leftmargin=*]
+    \item $\bmu_j \in \R^{561}$: Mean feature vector for activity $j$
+    \item $\bSigma_j \in \R^{561 \times 561}$: Covariance matrix for activity $j$
+\end{itemize}
+
+The Gaussian density function is:
+\begin{equation}
+\mathcal{N}(\bx; \bmu, \bSigma) = \frac{1}{(2\pi)^{d/2}|\bSigma|^{1/2}} \exp\left(-\frac{1}{2}(\bx-\bmu)^T\bSigma^{-1}(\bx-\bmu)\right)
+\end{equation}
+
+\textbf{Why Gaussian emissions are appropriate:}
+\begin{itemize}[leftmargin=*]
+    \item Central Limit Theorem: Features are averages/sums over 128 samples, which approach Gaussianity
+    \item Empirically validated in activity recognition literature
+    \item Computationally tractable (closed-form expressions for learning and inference)
+\end{itemize}
+
+\textbf{Verification procedure} (detailed in Section~\ref{sec:assumptions}):
+\begin{enumerate}
+    \item Test univariate normality per feature using Shapiro-Wilk test
+    \item Test multivariate normality using Q-Q plots
+    \item If violated, use Gaussian Mixture Models or non-parametric density estimation
+\end{enumerate}
+
+\subsubsection{Complete Model Parameters}
+
+The HMM is fully specified by $\blambda = (\bA, \bB, \bpi)$:
+\begin{itemize}[leftmargin=*]
+    \item $\bA$: $6 \times 6$ transition matrix (30 free parameters due to row constraints)
+    \item $\bB = \{\mathcal{N}(\bmu_j, \bSigma_j)\}_{j=1}^{6}$: Emission distributions (per-class means and covariances)
+    \item $\bpi = [\pi_1, \ldots, \pi_6]^T$: Initial state distribution where $\pi_j = P(S_1 = j)$ (5 free parameters)
+\end{itemize}
+
+\textbf{Total parameter count:}
+\begin{itemize}[leftmargin=*]
+    \item Transitions: 30 parameters
+    \item Means: $6 \times 561 = 3,366$ parameters
+    \item Covariances: $6 \times \frac{561 \times 562}{2} = 945,423$ parameters (symmetric matrices)
+    \item Initial distribution: 5 parameters
+\end{itemize}
+
+\textbf{Practical simplification:} Use \textbf{diagonal covariance matrices} (assume feature independence within each activity) to reduce covariance parameters to $6 \times 561 = 3,366$, making the model computationally feasible while retaining the core temporal structure.
+
+\subsection{Assumption Verification and Alternatives}
+\label{sec:assumptions}
+
+This section directly addresses the verification of model assumptions and provides alternatives when they fail.
+
+\subsubsection{Assumption 1: Linearity of the Observation Model}
+
+\textbf{Definition and Importance:}
+
+The linearity assumption states that the relationship between the hidden activity state and the observed sensor features can be approximated by a \textbf{linear function}. Specifically, for a given activity state $S_t = j$, the expected observation is:
+\begin{equation}
+\E[\bx_t \mid S_t = j] = \bmu_j
+\end{equation}
+and deviations from this mean follow an additive noise model:
+\begin{equation}
+\bx_t = \bmu_j + \bepsilon_t
+\end{equation}
+where $\bepsilon_t \sim \mathcal{N}(\mathbf{0}, \bSigma_j)$ is Gaussian noise.
+
+\textbf{Why Linearity Matters:}
+
+Linearity is crucial for several reasons:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Computational tractability:} Linear models enable closed-form solutions for parameter estimation in the Baum-Welch algorithm. The M-step updates for means and covariances are simple weighted averages, which are computationally efficient.
+    
+    \item \textbf{Model interpretability:} Linear relationships mean that feature contributions are additive and independent. Each feature's contribution to identifying an activity can be understood separately.
+    
+    \item \textbf{Gaussian assumption validity:} The Gaussian emission model assumes that observations are scattered around a mean in a symmetric, bell-shaped pattern. This is only valid if the underlying relationship is linear. Non-linear relationships would create curved patterns in the residuals, violating Gaussianity.
+    
+    \item \textbf{Connection to state-space models:} The linear observation model connects to the classical state-space formulation where observations are linear transformations of hidden states plus noise. This enables potential extensions to Kalman filtering frameworks if continuous state representations are needed.
+\end{enumerate}
+
+\textbf{Physical Justification:}
+
+Within short time windows (2.56 seconds), body kinematics are approximately linear:
+\begin{itemize}[leftmargin=*]
+    \item Acceleration is roughly constant during brief motion segments (constant acceleration assumption)
+    \item Angular velocities change smoothly without abrupt non-linear transitions
+    \item Feature extraction (means, standard deviations, FFT coefficients) applies linear operations (summation, integration) to raw sensor data
+\end{itemize}
+
+\textbf{Verification Tests:}
+
+\paragraph{1. Residual Analysis (Primary Test)}
+
+For each activity class $j$, fit the model and compute residuals:
+\begin{equation}
+\bepsilon_{ti} = \bx_{ti} - \bmu_j \quad \text{for all samples with } S_t = j
+\end{equation}
+
+Create \textbf{residual plots}:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Residuals vs.\ fitted values:} Plot $\bepsilon_{ti}$ against $\bmu_{ji}$ for each feature $i$
+    \item \textbf{Expected pattern:} Random scatter around zero with no discernible structure
+    \item \textbf{Non-linear pattern indicators:}
+    \begin{itemize}
+        \item U-shaped or inverted-U patterns $\rightarrow$ quadratic non-linearity
+        \item Systematic clustering $\rightarrow$ interaction effects between features
+        \item Heteroscedasticity (funnel shape) $\rightarrow$ variance depends on mean (multiplicative noise)
+    \end{itemize}
+\end{itemize}
+
+\paragraph{2. Ramsey RESET Test}
+
+This test detects non-linear relationships by adding powers of fitted values to the regression. For each feature $x_i$ regressed on activity indicators:
+\begin{equation}
+x_i = \beta_0 + \sum_{j=1}^{6} \beta_j \mathbb{1}(S_t = j) + \gamma_1 \hat{x}_i^2 + \gamma_2 \hat{x}_i^3 + \epsilon
+\end{equation}
+
+\textbf{Test hypothesis:}
+\begin{equation}
+H_0: \gamma_1 = \gamma_2 = 0 \quad \text{(linear model is adequate)}
+\end{equation}
+
+Use F-test to compare:
+\begin{equation}
+F = \frac{(\text{RSS}_{\text{restricted}} - \text{RSS}_{\text{unrestricted}})/2}{\text{RSS}_{\text{unrestricted}}/(n-k)} \sim F_{2, n-k}
+\end{equation}
+where RSS is residual sum of squares.
+
+\textbf{Decision rule:} If $p < 0.05$, reject linearity and consider non-linear models.
+
+\paragraph{3. Correlation Coefficient Analysis}
+
+Compute the coefficient of determination $R^2$ between observed features and class means:
+\begin{equation}
+R^2 = 1 - \frac{\sum_{t=1}^{T} \|\bx_t - \bmu_{S_t}\|^2}{\sum_{t=1}^{T} \|\bx_t - \bar{\bx}\|^2}
+\end{equation}
+where $\bar{\bx}$ is the overall mean.
+
+\textbf{Interpretation:}
+\begin{itemize}[leftmargin=*]
+    \item $R^2 > 0.7$: Linear model explains most variance, linearity is reasonable
+    \item $0.4 < R^2 < 0.7$: Moderate linear relationship, consider non-linear extensions
+    \item $R^2 < 0.4$: Weak linear fit, non-linear model likely needed
+\end{itemize}
+
+\paragraph{4. Variance Inflation Factor (VIF)}
+
+Check if features are linearly independent (multicollinearity affects linear model stability). For each feature $x_i$, regress it on all other features:
+\begin{equation}
+x_i = \beta_0 + \sum_{k \neq i} \beta_k x_k + \epsilon
+\end{equation}
+
+Compute:
+\begin{equation}
+\text{VIF}_i = \frac{1}{1 - R_i^2}
+\end{equation}
+
+\textbf{Decision rule:}
+\begin{itemize}[leftmargin=*]
+    \item $VIF < 5$: No multicollinearity concerns
+    \item $5 < VIF < 10$: Moderate multicollinearity, consider feature selection
+    \item $VIF > 10$: Severe multicollinearity, remove redundant features or use regularization
+\end{itemize}
+
+\textbf{Alternatives When Linearity Fails:}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Non-linear Feature Transformation}: Apply transformations to induce linearity (logarithmic, square root, Box-Cox)
+    
+    \item \textbf{Polynomial Features}: Augment feature space with polynomial terms
+    \begin{equation}
+    \bx_t' = [\bx_t, x_{t1}^2, x_{t2}^2, \ldots, x_{t1}x_{t2}, \ldots]^T
+    \end{equation}
+    
+    \item \textbf{Kernel-Based Methods}: Use kernel trick to implicitly map features to high-dimensional space
+    
+    \item \textbf{Gaussian Mixture Models}: Replace single Gaussian per activity with mixture
+    \begin{equation}
+    P(\bx_t \mid S_t = j) = \sum_{k=1}^{K} w_{jk} \mathcal{N}(\bx_t; \bmu_{jk}, \bSigma_{jk})
+    \end{equation}
+    
+    \item \textbf{Non-parametric Emissions}: Use kernel density estimation for emission probabilities
+\end{enumerate}
+
+\subsubsection{Assumption 2: Stationarity of Observations}
+
+\textbf{Definition:} A time series is \textbf{weakly stationary} if:
+\begin{enumerate}
+    \item Mean is constant over time: $\E[\bx_t \mid S_t = j] = \bmu_j$ (independent of $t$)
+    \item Covariance depends only on time lag, not absolute time: $\text{Cov}(\bx_t, \bx_{t+h}) = f(h)$
+\end{enumerate}
+
+\textbf{Why this matters:} HMM assumes that emission distributions $P(\bx_t \mid S_t = j)$ are \textbf{time-invariant} within each activity state. If sensor patterns drift over time (e.g., user fatigue changes walking pattern), the model will perform poorly.
+
+\textbf{Verification Tests:}
+
+\paragraph{1. Augmented Dickey-Fuller (ADF) Test}
+
+For each feature within a specific activity:
+\begin{equation}
+\Delta x_t = \alpha + \beta t + \gamma x_{t-1} + \epsilon_t
+\end{equation}
+
+Test hypothesis $H_0: \gamma = 0$ (unit root, non-stationary) vs.\ $H_1: \gamma < 0$ (stationary).
+
+\textbf{Decision rule:} If $p\text{-value} < 0.05$, reject $H_0$ and conclude the feature is stationary.
+
+\paragraph{2. Autocorrelation Function (ACF) Analysis}
+
+Compute autocorrelation at lag $h$:
+\begin{equation}
+\rho(h) = \frac{\sum_{t=1}^{T-h} (x_t - \bar{x})(x_{t+h} - \bar{x})}{\sum_{t=1}^{T} (x_t - \bar{x})^2}
+\end{equation}
+
+\textbf{Interpretation:}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Stationary process:} ACF decays exponentially to zero
+    \item \textbf{Non-stationary process:} ACF decays slowly or oscillates without damping
+\end{itemize}
+
+\textbf{Alternatives if stationarity fails:}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Differencing:} Model velocity features $\Delta \bx_t = \bx_t - \bx_{t-1}$ instead of raw accelerations
+    \item \textbf{Detrending:} Remove linear or polynomial trends before HMM training
+    \item \textbf{Time-varying HMM:} Allow parameters to change over time
+\end{enumerate}
+
+\subsubsection{Assumption 3: Gaussian Emission Distributions}
+
+\textbf{Verification Tests:}
+
+\paragraph{1. Shapiro-Wilk Test (Univariate Normality)}
+
+For each feature $i$ in activity $j$, test:
+\begin{equation}
+H_0: \text{feature } x_i \text{ is normally distributed}
+\end{equation}
+
+Test statistic:
+\begin{equation}
+W = \frac{\left(\sum_{k=1}^{n} a_k x_{(k)}\right)^2}{\sum_{k=1}^{n} (x_k - \bar{x})^2}
+\end{equation}
+where $x_{(k)}$ are ordered observations and $a_k$ are constants from the expected order statistics.
+
+\textbf{Decision rule:} If $W < W_{\text{critical}}$ or $p < 0.05$, reject normality.
+
+\paragraph{2. Q-Q Plots (Visual Check)}
+
+Plot sample quantiles vs.\ theoretical Gaussian quantiles. If points lie on a straight line, data is approximately Gaussian. Deviations indicate:
+\begin{itemize}[leftmargin=*]
+    \item S-shaped curve: Heavy tails (use Student-t distribution)
+    \item Curved tails: Skewness (use Box-Cox transformation)
+\end{itemize}
+
+\textbf{Alternatives if Gaussianity fails:}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Gaussian Mixture Models (GMM)}: Allow multimodal distributions
+    \item \textbf{Box-Cox Transformation}: Transform features to induce normality
+    \item \textbf{Non-parametric Emissions}: Use kernel density estimation
+\end{enumerate}
+
+\subsection{Parameter Estimation: Baum-Welch Algorithm}
+
+The \textbf{Expectation-Maximization (EM) algorithm} for HMMs is called Baum-Welch. It iteratively improves parameter estimates by alternating between:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{E-step:} Compute expected counts of state occupations and transitions given current parameters
+    \item \textbf{M-step:} Update parameters to maximize likelihood given expected counts
+\end{itemize}
+
+\subsubsection{Forward Algorithm (E-step Component)}
+
+Define \textbf{forward variable} as the joint probability of observations up to time $t$ and being in state $j$ at time $t$:
+\begin{equation}
+\alpha_t(j) = P(\bx_1, \ldots, \bx_t, S_t = j \mid \blambda)
+\end{equation}
+
+\textbf{Initialization} ($t = 1$):
+\begin{equation}
+\alpha_1(j) = \pi_j \cdot \mathcal{N}(\bx_1; \bmu_j, \bSigma_j)
+\end{equation}
+
+\textbf{Recursion} (for $t = 2, \ldots, T$):
+\begin{equation}
+\alpha_{t}(j) = \left[\sum_{i=1}^{6} \alpha_{t-1}(i) \cdot A_{ij}\right] \cdot \mathcal{N}(\bx_t; \bmu_j, \bSigma_j)
+\end{equation}
+
+\textbf{Total likelihood:}
+\begin{equation}
+P(\bx_{1:T} \mid \blambda) = \sum_{j=1}^{6} \alpha_T(j)
+\end{equation}
+
+\subsubsection{Backward Algorithm (E-step Component)}
+
+Define \textbf{backward variable} as the conditional probability of future observations given current state:
+\begin{equation}
+\beta_t(i) = P(\bx_{t+1}, \ldots, \bx_T \mid S_t = i, \blambda)
+\end{equation}
+
+\textbf{Initialization} ($t = T$):
+\begin{equation}
+\beta_T(i) = 1 \quad \text{for all } i
+\end{equation}
+
+\textbf{Recursion} (for $t = T-1, \ldots, 1$, working backward):
+\begin{equation}
+\beta_t(i) = \sum_{j=1}^{6} A_{ij} \cdot \mathcal{N}(\bx_{t+1}; \bmu_j, \bSigma_j) \cdot \beta_{t+1}(j)
+\end{equation}
+
+\subsubsection{E-step: Computing Expected Sufficient Statistics}
+
+\textbf{State occupation probability} (probability of being in state $i$ at time $t$ given all observations):
+\begin{equation}
+\gamma_t(i) = P(S_t = i \mid \bx_{1:T}, \blambda) = \frac{\alpha_t(i) \cdot \beta_t(i)}{\sum_{j=1}^{6} \alpha_t(j) \cdot \beta_t(j)}
+\end{equation}
+
+\textbf{State transition probability} (probability of transitioning from $i$ to $j$ at time $t$):
+\begin{equation}
+\xi_t(i,j) = P(S_t = i, S_{t+1} = j \mid \bx_{1:T}, \blambda) = \frac{\alpha_t(i) \cdot A_{ij} \cdot \mathcal{N}(\bx_{t+1}; \bmu_j, \bSigma_j) \cdot \beta_{t+1}(j)}{P(\bx_{1:T} \mid \blambda)}
+\end{equation}
+
+\subsubsection{M-step: Parameter Updates}
+
+\textbf{Update initial distribution:}
+\begin{equation}
+\hat{\pi}_i = \gamma_1(i)
+\end{equation}
+
+\textbf{Update transition matrix:}
+\begin{equation}
+\hat{A}_{ij} = \frac{\sum_{t=1}^{T-1} \xi_t(i,j)}{\sum_{t=1}^{T-1} \gamma_t(i)}
+\end{equation}
+
+\textbf{Interpretation:} Ratio of expected transitions from $i$ to $j$ divided by expected time spent in state $i$.
+
+\textbf{Update emission means:}
+\begin{equation}
+\hat{\bmu}_j = \frac{\sum_{t=1}^{T} \gamma_t(j) \cdot \bx_t}{\sum_{t=1}^{T} \gamma_t(j)}
+\end{equation}
+
+\textbf{Update emission covariances:}
+\begin{equation}
+\hat{\bSigma}_j = \frac{\sum_{t=1}^{T} \gamma_t(j) \cdot (\bx_t - \hat{\bmu}_j)(\bx_t - \hat{\bmu}_j)^T}{\sum_{t=1}^{T} \gamma_t(j)}
+\end{equation}
+
+\subsubsection{Convergence Criterion}
+
+Iterate E-step and M-step until log-likelihood improvement is negligible:
+\begin{equation}
+\left|\log P(\bx_{1:T} \mid \blambda^{(k+1)}) - \log P(\bx_{1:T} \mid \blambda^{(k)})\right| < \epsilon
+\end{equation}
+
+Typically set $\epsilon = 10^{-6}$ or use maximum iteration limit (50--100 iterations).
+
+\subsection{Inference: Viterbi Algorithm}
+
+The \textbf{Viterbi algorithm} finds the most likely sequence of hidden states given observations:
+\begin{equation}
+\mathbf{S}^* = \arg\max_{\mathbf{S}_{1:T}} P(\mathbf{S}_{1:T} \mid \bx_{1:T}, \blambda)
+\end{equation}
+
+This differs from forward-backward, which computes marginal probabilities $P(S_t = j \mid \bx_{1:T})$ independently for each time step.
+
+\subsubsection{Dynamic Programming Recursion}
+
+Define:
+\begin{equation}
+\delta_t(j) = \max_{S_1, \ldots, S_{t-1}} P(S_1, \ldots, S_{t-1}, S_t = j, \bx_{1:t} \mid \blambda)
+\end{equation}
+
+\textbf{Initialization:}
+\begin{align}
+\delta_1(j) &= \pi_j \cdot \mathcal{N}(\bx_1; \bmu_j, \bSigma_j) \\
+\psi_1(j) &= 0
+\end{align}
+
+\textbf{Recursion:}
+\begin{align}
+\delta_t(j) &= \max_{1 \leq i \leq 6} \left[\delta_{t-1}(i) \cdot A_{ij}\right] \cdot \mathcal{N}(\bx_t; \bmu_j, \bSigma_j) \\
+\psi_t(j) &= \arg\max_{1 \leq i \leq 6} \left[\delta_{t-1}(i) \cdot A_{ij}\right]
+\end{align}
+
+\textbf{Termination:}
+\begin{equation}
+S_T^* = \arg\max_{1 \leq j \leq 6} \delta_T(j)
+\end{equation}
+
+\textbf{Backtracking:}
+\begin{equation}
+S_t^* = \psi_{t+1}(S_{t+1}^*) \quad \text{for } t = T-1, T-2, \ldots, 1
+\end{equation}
+
+\textbf{Complexity:} $O(T \cdot N^2)$ where $T$ is sequence length and $N = 6$ is number of states.
+
+\subsection{Why Not Kalman Filter or Particle Filter?}
+
+\textbf{Kalman Filter} is appropriate for:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Continuous hidden states} (e.g., position, velocity)
+    \item \textbf{Linear dynamics:} $\bs_t = \mathbf{F} \bs_{t-1} + \mathbf{w}_t$
+    \item \textbf{Gaussian noise} in both state evolution and observations
+\end{itemize}
+
+\textbf{Not applicable here because:}
+\begin{itemize}[leftmargin=*]
+    \item Hidden states are \textbf{discrete categories} (walking, sitting, etc.), not continuous variables
+    \item State transitions are governed by a categorical probability distribution (transition matrix), not linear equations
+\end{itemize}
+
+\textbf{Particle Filter} is needed when:
+\begin{itemize}[leftmargin=*]
+    \item Non-linear dynamics or non-Gaussian noise
+    \item Continuous state space with complex posterior distributions
+\end{itemize}
+
+\textbf{Could be used if we extend the model to:}
+\begin{itemize}[leftmargin=*]
+    \item Estimate continuous body orientation angles (Euler angles) from sensor data
+    \item Model non-linear rotation matrices relating body frame to sensor frame
+    \item This would be a \textbf{hybrid discrete-continuous state space} requiring advanced techniques beyond the scope of this project
+\end{itemize}
+
+\textbf{For this project:} Standard HMM with discrete states and Gaussian emissions is sufficient and appropriate for the categorical activity recognition task.
+
+\section{Evaluation Metrics}
+
+\subsection{Confusion Matrix}
+
+Construct a $6 \times 6$ matrix where $C_{ij}$ counts the number of times true activity $i$ was predicted as activity $j$:
+\begin{equation}
+\text{Accuracy} = \frac{\sum_{i=1}^{6} C_{ii}}{\sum_{i=1}^{6}\sum_{j=1}^{6} C_{ij}}
+\end{equation}
+
+\subsection{Per-Class Metrics}
+
+\textbf{Precision} (fraction of predictions for class $j$ that are correct):
+\begin{equation}
+\text{Precision}_j = \frac{C_{jj}}{\sum_{i=1}^{6} C_{ij}}
+\end{equation}
+
+\textbf{Recall} (fraction of true class $j$ instances correctly identified):
+\begin{equation}
+\text{Recall}_j = \frac{C_{jj}}{\sum_{k=1}^{6} C_{jk}}
+\end{equation}
+
+\textbf{F1-score} (harmonic mean):
+\begin{equation}
+F1_j = 2 \cdot \frac{\text{Precision}_j \cdot \text{Recall}_j}{\text{Precision}_j + \text{Recall}_j}
+\end{equation}
+
+\subsection{Model Comparison}
+
+\textbf{Baseline models:}
+\begin{itemize}[leftmargin=*]
+    \item Naive Bayes classifier (ignores temporal structure)
+    \item Support Vector Machine with RBF kernel
+    \item Random Forest
+\end{itemize}
+
+\textbf{Expected outcome:} HMM should outperform baselines on activities with strong temporal dependencies (e.g., walking sequences) while performing comparably on stationary activities (sitting, standing).
+
+\section{Expected Outcomes}
+
+Based on literature, we expect:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Overall accuracy:} 89--94\% on test set
+    \item \textbf{Best performance:} Stationary activities (sitting, standing, laying) due to distinct low-acceleration signatures
+    \item \textbf{Challenging activities:} Walking upstairs vs.\ downstairs (similar acceleration patterns, differ mainly in vertical component)
+    \item \textbf{Advantage over non-temporal methods:} 3--5\% accuracy improvement by incorporating transition probabilities
+\end{itemize}
+
+The transition matrix should reveal:
+\begin{itemize}[leftmargin=*]
+    \item High self-transition probabilities (0.7--0.9 on diagonal)
+    \item Structured off-diagonal transitions (e.g., walking $\rightarrow$ standing more likely than walking $\rightarrow$ laying)
+    \item Physical constraints respected (no instantaneous transitions between very dissimilar activities)
+\end{itemize}
+
+\section{Potential Challenges and Mitigation}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{0.45\textwidth}p{0.45\textwidth}@{}}
+\toprule
+\textbf{Challenge} & \textbf{Mitigation Strategy} \\ \midrule
+High dimensionality (561 features) causes numerical instability in covariance estimation & 
+Use diagonal covariance matrices; apply PCA for dimensionality reduction; regularize covariance estimates \\[1em]
+
+EM algorithm convergence to local optima & 
+Multiple random initializations; use k-means for initial parameter estimation; monitor log-likelihood carefully \\[1em]
+
+Computational cost of full covariance matrices & 
+Implement diagonal covariance assumption; use efficient matrix operations with NumPy; consider GPU acceleration \\[1em]
+
+Assumption violations (non-Gaussian, non-linear) & 
+Implement GMM emissions as fallback; apply feature transformations; use non-parametric alternatives if needed \\[1em]
+
+Imbalanced activity distribution in dataset & 
+Use stratified sampling; weight classes inversely to frequency; report per-class metrics \\
+\bottomrule
+\end{tabular}
+\caption{Potential challenges and mitigation strategies}
+\end{table}
+
+\section{Conclusion}
+
+This project will develop a comprehensive Hidden Markov Model framework for human activity recognition from smartphone sensor data. By explicitly modeling the temporal dependencies between activities and treating activity labels as hidden states to be inferred from continuous sensor observations, we expect to achieve superior performance compared to traditional static classifiers. The rigorous verification of model assumptions through statistical tests and the provision of alternative modeling approaches when assumptions fail will ensure the robustness and reliability of our results.
+
+The project will contribute to the understanding of state-space models in real-world applications and demonstrate the practical value of probabilistic temporal modeling in ubiquitous computing scenarios. The comprehensive evaluation on the UCI-HAR benchmark dataset will provide insights into the strengths and limitations of HMMs for activity recognition tasks.
+
+\bibliographystyle{plainnat}
+\begin{thebibliography}{9}
+
+\bibitem{anguita2013}
+D.~Anguita, A.~Ghio, L.~Oneto, X.~Parra, and J.L.~Reyes-Ortiz.
+\newblock A public domain dataset for human activity recognition using smartphones.
+\newblock In \emph{European Symposium on Artificial Neural Networks (ESANN)}, 2013.
+
+\bibitem{uci2012}
+UCI Machine Learning Repository.
+\newblock Human activity recognition using smartphones dataset.
+\newblock \url{https://archive.ics.uci.edu/dataset/240/human+activity+recognition+using+smartphones}, 2012.
+
+\bibitem{kaggle2017}
+Kaggle.
+\newblock Human activity recognition with smartphones.
+\newblock \url{https://www.kaggle.com/datasets/uciml/human-activity-recognition-with-smartphones}, 2017.
+
+\bibitem{xue2022}
+S.~Xue and Y.~Zeng.
+\newblock Hidden markov model and its application in human activity recognition.
+\newblock Bremen, Germany, 2022.
+
+\bibitem{wang2023}
+L.~Wang, et al.
+\newblock Human activity recognition with an HMM-based sliding window approach.
+\newblock \emph{Sensors}, 2023.
+
+\bibitem{duong2018}
+T.V.~Duong, et al.
+\newblock Activity recognition using hierarchical hidden markov models.
+\newblock \emph{arXiv preprint arXiv:1810.05504}, 2018.
+
+\bibitem{murphy2002}
+K.~Murphy.
+\newblock Dynamic Bayesian networks: Representation, inference and learning.
+\newblock PhD thesis, UC Berkeley, 2002.
+
+\bibitem{rabiner1989}
+L.R.~Rabiner.
+\newblock A tutorial on hidden markov models and selected applications in speech recognition.
+\newblock \emph{Proceedings of IEEE}, 77(2):257--286, 1989.
+
+\end{thebibliography}
+
+\end{document}

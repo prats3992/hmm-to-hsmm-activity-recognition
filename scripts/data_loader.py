@@ -13,6 +13,11 @@ class StochasticDataLoader:
     """
     Load and prepare data for Discrete-Time HMM and Markov Chain models.
     Always preserves 'Activity' (hidden states/target) and 'subject' (ID) columns.
+    
+    Feature selection uses:
+    1. Correlation-based pruning to remove redundant features (threshold=0.95)
+    2. ANOVA F-test, Mutual Information, and Random Forest on pruned features
+    3. Selects top 200 features from ~300 pruned features (from original 561)
     """
     
     def __init__(self, train_path="data/train.csv", test_path="data/test.csv", 
@@ -34,9 +39,12 @@ class StochasticDataLoader:
         
         return train_df, test_df
     
-    def load_with_selected_features(self, method='anova', combine_methods=False):
+    def load_with_selected_features(self, method='anova', combine_methods=False, encode_labels=False):
         """
-        Load data with selected features.
+        Load data with selected features (after correlation pruning).
+        
+        Features are selected from ~300 pruned features (correlation < 0.95).
+        Each method selects top 200 features for improved model performance.
         
         Parameters:
         -----------
@@ -44,11 +52,13 @@ class StochasticDataLoader:
             Feature selection method: 'anova', 'mutual_info', or 'random_forest'
         combine_methods : bool
             If True, use union of all three methods
+        encode_labels : bool
+            If True, encode activity labels to integers (0-5)
             
         Returns:
         --------
         X_train, X_test : DataFrames with selected features
-        y_train, y_test : Activity labels
+        y_train, y_test : Activity labels (strings or encoded integers)
         subject_train, subject_test : Subject IDs
         feature_names : List of selected feature names
         """
@@ -79,13 +89,20 @@ class StochasticDataLoader:
         y_train = train_df['Activity']
         y_test = test_df['Activity']
         
+        # Optionally encode labels to integers
+        if encode_labels:
+            self.label_encoder.fit(y_train)
+            y_train = self.label_encoder.transform(y_train)
+            y_test = self.label_encoder.transform(y_test)
+            self.activity_mapping = {i: label for i, label in enumerate(self.label_encoder.classes_)}
+        
         subject_train = train_df['subject']
         subject_test = test_df['subject']
         
         print(f"\nData prepared for modeling:")
         print(f"  X_train: {X_train.shape}")
         print(f"  X_test: {X_test.shape}")
-        print(f"  Activities: {y_train.nunique()} classes")
+        print(f"  Activities: {len(np.unique(y_train))} classes")
         print(f"  Training subjects: {subject_train.nunique()}")
         print(f"  Test subjects: {subject_test.nunique()}")
         
@@ -129,16 +146,28 @@ class StochasticDataLoader:
         Returns sequences grouped by subject with continuous observations.
         
         HMM Structure:
-        - Hidden States: 6 discrete activities
+        - Hidden States: 6 discrete activities (encoded as integers 0-5)
         - Observations: Continuous sensor features (Gaussian emissions)
         
         Returns:
         --------
         train_sequences : list of (observations, labels, subject_id) tuples
+            - observations: np.ndarray of shape (T, n_features) - continuous features
+            - labels: np.ndarray of shape (T,) - integer activity labels 0-5
+            - subject_id: int - subject identifier
         test_sequences : list of (observations, labels, subject_id) tuples
         """
         X_train, X_test, y_train, y_test, subject_train, subject_test, _ = \
             self.load_with_selected_features(method=method)
+        
+        # Encode activity labels to integers (0-5)
+        # This ensures HMM receives integer state indices
+        self.label_encoder.fit(y_train)
+        y_train_encoded = self.label_encoder.transform(y_train)
+        y_test_encoded = self.label_encoder.transform(y_test)
+        
+        # Store mapping for later use
+        self.activity_mapping = {i: label for i, label in enumerate(self.label_encoder.classes_)}
         
         # Standardize features
         if standardize:
@@ -149,11 +178,11 @@ class StochasticDataLoader:
         
         # Combine features with metadata
         train_df = X_train.copy()
-        train_df['Activity'] = y_train.values
+        train_df['Activity'] = y_train_encoded  # Use encoded labels
         train_df['subject'] = subject_train.values
         
         test_df = X_test.copy()
-        test_df['Activity'] = y_test.values
+        test_df['Activity'] = y_test_encoded  # Use encoded labels
         test_df['subject'] = subject_test.values
         
         # Create sequences per subject
@@ -161,14 +190,14 @@ class StochasticDataLoader:
         for subject_id in sorted(train_df['subject'].unique()):
             subject_data = train_df[train_df['subject'] == subject_id]
             observations = subject_data.drop(['Activity', 'subject'], axis=1).values
-            labels = subject_data['Activity'].values
+            labels = subject_data['Activity'].values.astype(int)  # Ensure integer type
             train_sequences.append((observations, labels, subject_id))
         
         test_sequences = []
         for subject_id in sorted(test_df['subject'].unique()):
             subject_data = test_df[test_df['subject'] == subject_id]
             observations = subject_data.drop(['Activity', 'subject'], axis=1).values
-            labels = subject_data['Activity'].values
+            labels = subject_data['Activity'].values.astype(int)  # Ensure integer type
             test_sequences.append((observations, labels, subject_id))
         
         print(f"\nHMM Sequences prepared:")
@@ -176,6 +205,7 @@ class StochasticDataLoader:
         print(f"  Test: {len(test_sequences)} subjects")
         print(f"  Example sequence length: {len(train_sequences[0][0])} timesteps")
         print(f"  Feature dimension: {train_sequences[0][0].shape[1]}")
+        print(f"  Label encoding: {self.activity_mapping}")
         
         return train_sequences, test_sequences
     
@@ -220,6 +250,7 @@ def demo():
     print("="*80)
     print("STOCHASTIC DATA LOADER - USAGE DEMO")
     print("Discrete-Time HMM and Markov Chain Analysis")
+    print("Features: 561 → 300 (pruned) → 200 (selected)")
     print("="*80)
     
     loader = StochasticDataLoader()
@@ -231,14 +262,34 @@ def demo():
     
     print("\n2. Loading data with COMBINED features (union of all methods):")
     print("-" * 60)
-    X_train_combined, X_test_combined, y_train, y_test, _, _, features_combined = \
+    X_train_combined, X_test_combined, y_train_c, y_test_c, _, _, features_combined = \
         loader.load_with_selected_features(combine_methods=True)
     
     print("\n3. Preparing sequences for Discrete-Time HMM:")
     print("-" * 60)
     train_seq, test_seq = loader.prepare_for_hmm(method='anova')
-    print(f"   → Hidden States: 6 discrete activities")
+    print(f"   → Hidden States: 6 discrete activities (encoded 0-5)")
     print(f"   → Observations: Continuous sensor features ({train_seq[0][0].shape[1]}-dim)")
+    print(f"   → Model Type: Gaussian HMM (continuous observations)")
+    print(f"   → Activity mapping: {loader.activity_mapping}")
+    
+    print("\n4. Preparing sequences for Markov Chain:")
+    print("-" * 60)
+    train_mc, test_mc, activities = loader.prepare_for_markov_chain()
+    print(f"   → Pure discrete state transitions")
+    print(f"   → No continuous observations needed")
+    
+    print("\n" + "="*80)
+    print("KEY POINTS:")
+    print("="*80)
+    print("✓ 'Activity' represents discrete hidden states (HMM) or discrete states (Markov)")
+    print("✓ 'subject' enables sequential modeling per individual")
+    print("✓ Feature selection: 561 → ~300 (pruned) → 200 (selected)")
+    print("✓ Correlation-based pruning removes multicollinearity")
+    print("✓ Discrete-Time HMM: continuous observations → discrete hidden states")
+    print("✓ Markov Chain: discrete state → discrete state transitions")
+    print("✓ Labels encoded as integers 0-5 for HMM training")
+    print("="*80 + "\n")
     print(f"   → Model Type: Gaussian HMM (continuous observations)")
     
     print("\n4. Preparing sequences for Markov Chain:")

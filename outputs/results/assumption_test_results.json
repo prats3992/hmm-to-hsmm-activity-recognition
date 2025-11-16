@@ -1,0 +1,163 @@
+{
+  "linearity_residuals": {
+    "r_squared": {
+      "LAYING": 0.9125291003058872,
+      "SITTING": 0.9278169893244252,
+      "STANDING": 0.9359934216372349,
+      "WALKING": 0.8564882075988417,
+      "WALKING_DOWNSTAIRS": 0.8847452308034056,
+      "WALKING_UPSTAIRS": 0.8227525478529141
+    },
+    "residual_std": {
+      "LAYING": 0.2446024247287973,
+      "SITTING": 0.18830435553573804,
+      "STANDING": 0.1672972701911311,
+      "WALKING": 0.3495610390471186,
+      "WALKING_DOWNSTAIRS": 0.4539092977020106,
+      "WALKING_UPSTAIRS": 0.3618740056361531
+    },
+    "residual_skewness": {
+      "LAYING": 3.9616274697015617,
+      "SITTING": 3.045351168218683,
+      "STANDING": 2.5832881851356295,
+      "WALKING": 0.15807508526167335,
+      "WALKING_DOWNSTAIRS": 0.15154070770748537,
+      "WALKING_UPSTAIRS": 0.17498994240750346
+    },
+    "residual_kurtosis": {
+      "LAYING": 32.33458553770407,
+      "SITTING": 19.680300266104634,
+      "STANDING": 14.787094369674392,
+      "WALKING": 0.3785947762103003,
+      "WALKING_DOWNSTAIRS": 1.069070948752813,
+      "WALKING_UPSTAIRS": 0.14536001870045726
+    }
+  },
+  "linearity_reset": {
+    "f_statistics": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      5.304577506198593e-13,
+      0.0,
+      4.812889827254078e-13,
+      4.771246516410439e-13,
+      0.0,
+      0.0,
+      1.5790205572475376e-12,
+      0.0,
+      0.0,
+      7.631281995089498e-13,
+      -7.606945416169248e-13,
+      0.0,
+      7.363251993498523e-13,
+      0.0,
+      0.0
+    ],
+    "p_values": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.9999999999994695,
+      1.0,
+      0.9999999999995187,
+      0.9999999999995228,
+      1.0,
+      1.0,
+      0.9999999999984209,
+      1.0,
+      1.0,
+      0.9999999999992368,
+      1.0,
+      1.0,
+      0.9999999999992637,
+      1.0,
+      1.0
+    ],
+    "reject_linearity": 0
+  },
+  "stationarity_adf": {
+    "stationary_rates": {
+      "LAYING": 1.0,
+      "SITTING": 1.0,
+      "STANDING": 1.0,
+      "WALKING": 1.0,
+      "WALKING_DOWNSTAIRS": 1.0,
+      "WALKING_UPSTAIRS": 1.0
+    },
+    "adf_statistics": {
+      "LAYING": -8.03739046519721,
+      "SITTING": -10.467321739345406,
+      "STANDING": -9.819833527876636,
+      "WALKING": -4.513857823805345,
+      "WALKING_DOWNSTAIRS": -4.436544325201854,
+      "WALKING_UPSTAIRS": -4.22451997957833
+    },
+    "p_values": {
+      "LAYING": 5.243838688244507e-05,
+      "SITTING": 1.7818134219585358e-06,
+      "STANDING": 4.0909062317883085e-06,
+      "WALKING": 0.000712813659658474,
+      "WALKING_DOWNSTAIRS": 0.0006752747713265032,
+      "WALKING_UPSTAIRS": 0.001323826098421478
+    }
+  },
+  "stationarity_acf": {
+    "acf_decay_rates": {
+      "LAYING": 0.07329961780439141,
+      "SITTING": 0.09336374610725504,
+      "STANDING": 0.09185968711738614,
+      "WALKING": 0.02308662188402065,
+      "WALKING_DOWNSTAIRS": 0.04545276135465351,
+      "WALKING_UPSTAIRS": 0.04031154791921063
+    },
+    "significant_lags": {
+      "LAYING": 9,
+      "SITTING": 13,
+      "STANDING": 16,
+      "WALKING": 20,
+      "WALKING_DOWNSTAIRS": 20,
+      "WALKING_UPSTAIRS": 20
+    }
+  },
+  "gaussianity_shapiro": {
+    "gaussian_rates": {
+      "LAYING": 0.0,
+      "SITTING": 0.0,
+      "STANDING": 0.0,
+      "WALKING": 0.06666666666666667,
+      "WALKING_DOWNSTAIRS": 0.06666666666666667,
+      "WALKING_UPSTAIRS": 0.03333333333333333
+    },
+    "shapiro_statistics": {
+      "LAYING": 0.6113909565542566,
+      "SITTING": 0.6046934325975265,
+      "STANDING": 0.7033899018437697,
+      "WALKING": 0.9619385749054702,
+      "WALKING_DOWNSTAIRS": 0.9680440109222638,
+      "WALKING_UPSTAIRS": 0.9746781869850258
+    },
+    "p_values": {
+      "LAYING": 9.88711316461585e-17,
+      "SITTING": 2.2698398165994474e-30,
+      "STANDING": 5.2592591360875335e-15,
+      "WALKING": 0.011308827833616706,
+      "WALKING_DOWNSTAIRS": 0.03844018478365365,
+      "WALKING_UPSTAIRS": 0.015053452954605612
+    }
+  },
+  "gaussianity_qq": {
+    "activities": [
+      "LAYING",
+      "SITTING",
+      "STANDING",
+      "WALKING",
+      "WALKING_DOWNSTAIRS",
+      "WALKING_UPSTAIRS"
+    ]
+  }
+}
