@@ -114,66 +114,80 @@ def verify_conditional_independence(X, y, classes, output_dir):
 def verify_markov_property(y, classes):
     print("\n--- Test 3: Markov Property (1st vs 2nd Order) ---")
     # We test if P(St | St-1, St-2) provides more info than P(St | St-1)
-    # Using Likelihood Ratio Test
+    # Using Likelihood Ratio Test (Chi-Squared)
     
-    # 1. Build Transition Counts
     n_states = len(classes)
     
+    # 1. Build Transition Counts
     # First Order: Count(t-1, t)
     trans_1 = np.zeros((n_states, n_states))
     # Second Order: Count(t-2, t-1, t)
     trans_2 = np.zeros((n_states, n_states, n_states))
     
-    for t in range(2, len(y)):
-        s_prev2 = y[t-2]
-        s_prev1 = y[t-1]
-        s_curr = y[t]
-        
-        trans_1[s_prev1, s_curr] += 1
-        trans_2[s_prev2, s_prev1, s_curr] += 1
-        
-    # Calculate Log Likelihoods
-    # L1 = sum log P(st | st-1)
-    # L2 = sum log P(st | st-1, st-2)
+    # Map labels to 0..N-1 just in case
+    le = LabelEncoder()
+    y_enc = le.fit_transform(y)
     
-    log_l1 = 0
-    log_l2 = 0
-    
-    # Avoid log(0)
+    for t in range(len(y_enc) - 1):
+        i = y_enc[t]
+        j = y_enc[t+1]
+        trans_1[i, j] += 1
+        
+        if t < len(y_enc) - 2:
+            k = y_enc[t+2]
+            trans_2[i, j, k] += 1
+            
+    # 2. Calculate Log-Likelihoods
     epsilon = 1e-10
     
-    # 1st Order Probabilities
-    row_sums_1 = trans_1.sum(axis=1, keepdims=True) + epsilon
-    probs_1 = (trans_1 + epsilon) / row_sums_1
+    # Order 1
+    row_sums_1 = trans_1.sum(axis=1, keepdims=True)
+    probs_1 = (trans_1 + epsilon) / (row_sums_1 + epsilon * n_states)
     
-    # 2nd Order Probabilities
-    row_sums_2 = trans_2.sum(axis=2, keepdims=True) + epsilon
-    probs_2 = (trans_2 + epsilon) / row_sums_2
-    
-    # Compute Likelihoods over the data
-    for t in range(2, len(y)):
-        s_prev2 = y[t-2]
-        s_prev1 = y[t-1]
-        s_curr = y[t]
+    log_L1 = 0
+    for t in range(len(y_enc) - 1):
+        i = y_enc[t]
+        j = y_enc[t+1]
+        log_L1 += np.log(probs_1[i, j])
         
-        log_l1 += np.log(probs_1[s_prev1, s_curr])
-        log_l2 += np.log(probs_2[s_prev2, s_prev1, s_curr])
+    # Order 2
+    probs_2 = np.zeros_like(trans_2)
+    for i in range(n_states):
+        for j in range(n_states):
+            total = trans_2[i, j].sum()
+            if total > 0:
+                probs_2[i, j, :] = (trans_2[i, j, :] + epsilon) / (total + epsilon * n_states)
+            else:
+                probs_2[i, j, :] = 1.0 / n_states
+                
+    log_L2 = 0
+    for t in range(len(y_enc) - 2):
+        i = y_enc[t]
+        j = y_enc[t+1]
+        k = y_enc[t+2]
+        log_L2 += np.log(probs_2[i, j, k])
         
-    print(f"Log-Likelihood (1st Order): {log_l1:.2f}")
-    print(f"Log-Likelihood (2nd Order): {log_l2:.2f}")
+    # 3. Likelihood Ratio Test
+    # Statistic = 2 * (LogL_Complex - LogL_Simple)
+    LR_stat = 2 * (log_L2 - log_L1)
     
-    # Likelihood Ratio Statistic
-    # D = -2 * (L1 - L2)
-    # Degrees of Freedom difference: N^3 - N^2 (roughly, accounting for zeros is complex)
-    # We'll just look at the magnitude improvement
+    # Degrees of Freedom: N(N-1)^2
+    df = n_states * (n_states - 1)**2
     
-    improvement = log_l2 - log_l1
-    print(f"Likelihood Improvement: {improvement:.2f}")
+    p_value = stats.chi2.sf(LR_stat, df)
     
-    if improvement > 100: # Arbitrary large threshold for significance given N=7000
-        print(">> 2nd Order model is significantly better. Markov assumption (1st order) is a simplification.")
+    print(f"Log-Likelihood (1st Order): {log_L1:.2f}")
+    print(f"Log-Likelihood (2nd Order): {log_L2:.2f}")
+    print(f"LR Statistic: {LR_stat:.2f}")
+    print(f"Degrees of Freedom: {df}")
+    print(f"P-Value: {p_value:.4e}")
+    
+    if p_value < 0.05:
+        print(">> Result: REJECT Null Hypothesis.")
+        print(">> The sequence is NOT First-Order Markov (2nd order is significantly better).")
     else:
-        print(">> 1st Order model is sufficient.")
+        print(">> Result: ACCEPT Null Hypothesis.")
+        print(">> The sequence IS First-Order Markov (2nd order adds no significant info).")
 
 def main():
     output_dir = 'outputs/assumptions_gmm'
