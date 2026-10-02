@@ -117,7 +117,7 @@ In our proposal, we committed to verifying three key statistical assumptions bef
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{../outputs/images/gaussianity_qq_plots.png}
+    \includegraphics[width=0.8\textwidth]{../outputs/figures/gaussianity_qq_plots.png}
     \caption{Q-Q Plots for the 1st Principal Component. The deviation from the red diagonal line confirms that the data is NOT normally distributed.}
     \label{fig:qq_plot}
 \end{figure}
@@ -137,14 +137,14 @@ In our proposal, we committed to verifying three key statistical assumptions bef
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{../outputs/images/linearity_residuals.png}
+    \includegraphics[width=0.8\textwidth]{../outputs/figures/linearity_residuals.png}
     \caption{Residual Analysis. Ideally, these plots should look like random static (white noise). The visible structure and waves indicate that the model is missing some temporal dynamics.}
     \label{fig:residuals}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{../outputs/images/gmm_vs_gaussian_fit.png}
+    \includegraphics[width=0.8\textwidth]{../outputs/figures/gmm_vs_gaussian_fit.png}
     \caption{Distribution of the 1st Principal Component. The Red Dashed Line (Single Gaussian) fails to capture the data's shape. The Blue Line (GMM) fits significantly better.}
     \label{fig:gmm_fit}
 \end{figure}
@@ -195,7 +195,7 @@ We subjected the GMM-HMM to a new round of rigorous testing.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{../outputs/images/residual_acf.png}
+    \includegraphics[width=0.8\textwidth]{../outputs/figures/residual_acf.png}
     \caption{Autocorrelation Function (ACF) of residuals. The strong peaks indicate that the model does not fully capture the temporal correlation in the raw signal.}
     \label{fig:acf}
 \end{figure}
@@ -205,7 +205,7 @@ We attempted to reduce this correlation by downsampling the data (taking every 1
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{../outputs/images/downsampling_acf.png}
+    \includegraphics[width=0.8\textwidth]{../outputs/figures/downsampling_acf.png}
     \caption{ACF after Downsampling. The correlation is reduced but still present. The trade-off in data loss was not worth the theoretical improvement.}
     \label{fig:downsample_acf}
 \end{figure}
@@ -274,7 +274,7 @@ The HSMM introduces new assumptions that must be verified.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{../outputs/images/hsmm_duration_assumptions.png}
+    \includegraphics[width=0.8\textwidth]{../outputs/figures/hsmm_duration_assumptions.png}
     \caption{Duration Distribution Analysis: The histograms show the actual duration of activities. The overlaid curves show that Gaussian (Normal) distributions fit the data reasonably well, whereas Geometric distributions (implied by standard HMMs) do not.}
     \label{fig:duration_dist}
 \end{figure}
@@ -298,7 +298,7 @@ Subject 12 & 87.81\% & 91.87\% & \textbf{93.44\%} & \textbf{HSMM (+5.6\%)} \\ \b
 \subsection{Overall Performance Comparison}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\textwidth]{../outputs/images/model_comparison_bar.png}
+    \includegraphics[width=0.9\textwidth]{../outputs/figures/model_comparison_bar.png}
     \caption{Accuracy Comparison across all subjects and models. The GMM-HMM and HSMM consistently outperform the Naive Bayes baseline. Note that HSMM achieves the highest accuracy for Subject 12, validating the duration modeling for consistent subjects.}
     \label{fig:comparison}
 \end{figure}
@@ -310,13 +310,13 @@ To understand \textit{where} the models fail, we analyze the confusion matrices.
     \centering
     \begin{subfigure}[b]{0.48\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{../outputs/images/confusion_matrix_hmm.png}
+        \includegraphics[width=\textwidth]{../outputs/figures/confusion_matrix_hmm.png}
         \caption{Standard Gaussian HMM}
     \end{subfigure}
     \hfill
     \begin{subfigure}[b]{0.48\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{../outputs/images/confusion_matrix_gmm_hmm.png}
+        \includegraphics[width=\textwidth]{../outputs/figures/confusion_matrix_gmm_hmm.png}
         \caption{GMM-HMM (2 Mixtures)}
     \end{subfigure}
     \caption{Comparison of Standard HMM vs. GMM-HMM Confusion Matrices. The Standard HMM (left) shows more off-diagonal errors, particularly between "Sitting" and "Standing" (static activities) and "Walking" vs "Walking Upstairs" (dynamic). The GMM-HMM (right) cleans up many of these errors by better modeling the multimodal nature of the sensor data.}
@@ -325,14 +325,14 @@ To understand \textit{where} the models fail, we analyze the confusion matrices.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{../outputs/images/hsmm_confusion_matrix_subj12.png}
+    \includegraphics[width=0.7\textwidth]{../outputs/figures/hsmm_confusion_matrix_subj12.png}
     \caption{HSMM Confusion Matrix for Subject 12 (Best Performance). The model achieves near-perfect classification for static states (Laying, Standing) and very high accuracy for dynamic states. The explicit duration modeling helps distinguish between activities that might look similar in a single frame but have different characteristic durations.}
     \label{fig:hsmm_conf_subj12}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{../outputs/images/hsmm_confusion_matrix_overall.png}
+    \includegraphics[width=0.7\textwidth]{../outputs/figures/hsmm_confusion_matrix_overall.png}
     \caption{Overall HSMM Confusion Matrix (All Subjects). Comparing this to the GMM-HMM matrix (Figure \ref{fig:conf_matrix_comparison}b), we see that HSMM maintains high accuracy across the board. The explicit duration modeling helps regularize the predictions, though it may introduce errors if the duration assumption (Gaussian) does not perfectly match a specific subject's behavior.}
     \label{fig:hsmm_conf_overall}
 \end{figure}
@@ -375,13 +375,13 @@ Our tests proved the Embedded sequence satisfies the Markov property, making HSM
     \centering
     \begin{subfigure}[b]{1.0\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{../outputs/images/viterbi_decoding_subj12.png}
+        \includegraphics[width=\textwidth]{../outputs/figures/viterbi_decoding_subj12.png}
         \caption{Standard Viterbi Decoding (GMM-HMM)}
     \end{subfigure}
     \par\bigskip
     \begin{subfigure}[b]{1.0\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{../outputs/images/hsmm_decoding_subj12.png}
+        \includegraphics[width=\textwidth]{../outputs/figures/hsmm_decoding_subj12.png}
         \caption{Duration-Viterbi Decoding (HSMM)}
     \end{subfigure}
     \caption{Comparison of Decoding Traces for Subject 12. Top: The standard Viterbi algorithm occasionally "flickers" or makes rapid state changes when the sensor data is noisy. Bottom: The HSMM's Duration-Viterbi enforces a minimum duration structure, resulting in a smoother, more physically realistic sequence of activities that matches the Ground Truth (top bar) more closely.}

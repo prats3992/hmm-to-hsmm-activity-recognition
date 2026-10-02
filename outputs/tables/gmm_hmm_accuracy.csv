@@ -1,0 +1,9 @@
+Model,Subject,Accuracy
+GMM-HMM (frame-level),Overall,0.8486596538853071
+GMM-HMM (frame-level),Subject 2,0.9105960264900662
+GMM-HMM (frame-level),Subject 9,0.7951388888888888
+GMM-HMM (frame-level),Subject 12,0.865625
+GMM-HMM (Viterbi),Overall,0.9202578893790295
+GMM-HMM (Viterbi),Subject 2,0.9503311258278145
+GMM-HMM (Viterbi),Subject 9,0.90625
+GMM-HMM (Viterbi),Subject 12,0.915625

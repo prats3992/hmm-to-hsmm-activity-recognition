@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hmm-to-hsmm-activity-recognition"
+version = "1.0.0"
+description = "Human activity recognition with Gaussian HMMs, GMM-HMMs and hidden semi-Markov models"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Pratham Arora" },
+    { name = "Vaisakh Menon" },
+]
+dependencies = [
+    "numpy>=1.23",
+    "pandas>=1.5",
+    "scipy>=1.9",
+    "scikit-learn>=1.2",
+    "hmmlearn>=0.3",
+    "statsmodels>=0.13",
+    "matplotlib>=3.6",
+    "seaborn>=0.12",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

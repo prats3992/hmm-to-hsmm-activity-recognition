@@ -1,0 +1,5 @@
+Model,Subject,Accuracy
+Gaussian HMM (frame-level),Overall,0.8527315914489311
+Gaussian HMM (frame-level),Subject 2,0.9039735099337748
+Gaussian HMM (frame-level),Subject 9,0.8090277777777778
+Gaussian HMM (frame-level),Subject 12,0.859375
